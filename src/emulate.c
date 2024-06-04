@@ -11,6 +11,8 @@
 #define Z_FLAG 2 // Zero
 #define C_FLAG 1 // Carry
 #define V_FLAG 0 // Overflow
+#define PC_REGISTER_INDEX 31 // Assuming 31 is used as PC index for the purpose of this emulator
+
 
 typedef struct {
     uint64_t regs[31]; // General-purpose registers X0-X30
@@ -96,6 +98,7 @@ void arth_immediate(CPUState *cpu, uint32_t instruction) {
             set_flag(cpu, C_FLAG, operand1 >= operand2); // Carry flag
             set_flag(cpu, V_FLAG, ((int64_t)operand1 > 0 && (int64_t)operand2 < 0 && (int64_t)result < 0) ||
                                  ((int64_t)operand1 < 0 && (int64_t)operand2 > 0 && (int64_t)result > 0)); // Overflow flag
+                    
             break;
         default:
             printf("Unknown arithmetic immediate opcode: 0x%x\n", opc);
@@ -221,16 +224,17 @@ void arithmetic_instruction(CPUState *cpu, uint32_t instruction) {
         operand1 &= 0xFFFFFFFF;
     }
 
+    printf("arithmetic_instruction: PC=0x%llx, instruction=0x%08x, opc=0x%x, rd=%d, rn=%d, rm=%d\n",
+           cpu->pc, instruction, opc, rd, rn, rm);
+
     switch (opc) {
         case 0x0: // ADD
             result = operand1 + operand_value;
             if (sf == 0) result &= 0xFFFFFFFF; // 32-bit result
-            cpu->regs[rd] = result;
             break;
         case 0x1: // ADDS
             result = operand1 + operand_value;
             if (sf == 0) result &= 0xFFFFFFFF; // 32-bit result
-            cpu->regs[rd] = result;
             // Update PSTATE flags
             set_flag(cpu, N_FLAG, (sf == 0) ? (int32_t)result < 0 : (int64_t)result < 0); // Negative flag
             set_flag(cpu, Z_FLAG, result == 0); // Zero flag
@@ -241,12 +245,10 @@ void arithmetic_instruction(CPUState *cpu, uint32_t instruction) {
         case 0x2: // SUB
             result = operand1 - operand_value;
             if (sf == 0) result &= 0xFFFFFFFF; // 32-bit result
-            cpu->regs[rd] = result;
             break;
         case 0x3: // SUBS
             result = operand1 - operand_value;
             if (sf == 0) result &= 0xFFFFFFFF; // 32-bit result
-            cpu->regs[rd] = result;
             // Update PSTATE flags
             set_flag(cpu, N_FLAG, (sf == 0) ? (int32_t)result < 0 : (int64_t)result < 0); // Negative flag
             set_flag(cpu, Z_FLAG, result == 0); // Zero flag
@@ -255,9 +257,16 @@ void arithmetic_instruction(CPUState *cpu, uint32_t instruction) {
                                   ((int64_t)operand1 < 0 && (int64_t)operand_value > 0 && (int64_t)result > 0)); // Overflow flag
             break;
         default:
-            printf("Unknown arithmetic immediate opcode: 0x%x\n", opc);
+            printf("Unknown arithmetic instruction opcode: 0x%x\n", opc);
             return;
     }
+
+    if (rd != PC_REGISTER_INDEX) {
+        cpu->regs[rd] = result;
+    } else {
+        printf("Attempt to write to PC prevented. Result: 0x%llx\n", result);
+    }
+    
     printf("arithmetic_instruction: X%d = X%d %s X%d (result: %llu)\n", rd, rn, (opc & 0x2) ? "-" : "+", rm, result);
 }
 
@@ -451,17 +460,20 @@ void branch_instruction(CPUState *cpu, uint32_t instruction) {
     int32_t simm26, simm19;
     int64_t offset;
 
+    printf("Branch instruction: PC=0x%llx, instruction=0x%08x, op=0x%x\n", cpu->pc, instruction, op);
+
     switch (op) {
         case 0x05: // Unconditional branch
             simm26 = (instruction & 0x3FFFFFF); // Bits 25-0
-            offset = (int64_t)simm26 << 2;   
+            offset = (int64_t)simm26 << 2;
+            printf("Unconditional branch: offset=0x%llx, PC before=0x%llx\n", offset, cpu->pc);
             cpu->pc += offset - 4; // Set the PC to the target address
-            printf("Unconditional branch1 to PC=0x%llx\n", cpu->pc);
-            break; // Do not increment PC after the branch
+            printf("Unconditional branch to PC=0x%llx\n", cpu->pc);
+            break;
         case 0x35: // Register branch
             {
                 uint32_t Xn = (instruction >> 5) & 0x1F; // Bits 9-5
-                printf("we here?");
+                printf("aadddd\n");
                 cpu->pc = cpu->regs[Xn];
                 printf("Register branch to PC=0x%llx\n", cpu->pc);
             }
@@ -471,8 +483,7 @@ void branch_instruction(CPUState *cpu, uint32_t instruction) {
             uint32_t cond = instruction & 0xF;     // Bits 3-0
             offset = (int64_t)simm19 << 2;
             if (check_condition(cpu, cond)) {
-                printf("hi");
-                printf("offset=%llx\n",offset);
+                printf("Condition met for branch: cond=0x%x, offset=0x%llx\n", cond, offset);
                 cpu->pc += offset - 4; // Set the PC to the target address
                 printf("Conditional branch to PC=0x%llx on condition %x\n", cpu->pc, cond);
                 return; // Do not increment PC after the branch
@@ -486,23 +497,32 @@ void branch_instruction(CPUState *cpu, uint32_t instruction) {
     }
 }
 
+
 int check_condition(CPUState *cpu, uint32_t cond) {
     uint32_t Z = (cpu->pstate >> Z_FLAG) & 1;
     uint32_t N = (cpu->pstate >> N_FLAG) & 1;
     uint32_t V = (cpu->pstate >> V_FLAG) & 1;
+    uint32_t C = (cpu->pstate >> C_FLAG) & 1; // Ensure we also read the carry flag
 
     switch (cond) {
-        case 0x0: return Z == 1;                        // EQ
-        case 0x1: return Z == 0;                        // NE
-        case 0xA: return N == V;                        // GE
-        case 0xB: return N != V;                        // LT
-        case 0xC: return Z == 0 && N == V;              // GT
-        case 0xD: return Z == 1 || N != V;              // LE
-        case 0xE: return 1;                             // AL (always)
-        default: return 0;                              // Unknown condition
+        case 0x0: return Z == 1;                        // EQ: Equal
+        case 0x1: return Z == 0;                        // NE: Not equal
+        case 0x2: return C == 1;                        // CS/HS: Carry set / unsigned higher or same
+        case 0x3: return C == 0;                        // CC/LO: Carry clear / unsigned lower
+        case 0x4: return N == 1;                        // MI: Minus / negative
+        case 0x5: return N == 0;                        // PL: Plus / positive or zero
+        case 0x6: return V == 1;                        // VS: Overflow
+        case 0x7: return V == 0;                        // VC: No overflow
+        case 0x8: return (C == 1 && Z == 0);            // HI: Unsigned higher
+        case 0x9: return (C == 0 || Z == 1);            // LS: Unsigned lower or same
+        case 0xA: return N == V;                        // GE: Signed greater than or equal
+        case 0xB: return N != V;                        // LT: Signed less than
+        case 0xC: return (Z == 0 && N == V);            // GT: Signed greater than
+        case 0xD: return (Z == 1 || N != V);            // LE: Signed less than or equal
+        case 0xE: return 1;                             // AL: Always (unconditional)
+        default: return 0;                              // NV: Never (shouldn't happen)
     }
 }
-
 
 void decode_and_execute(CPUState *cpu, uint32_t *memory, uint32_t instruction) {
     printf("Decoding instruction at PC=0x%llx: 0x%08x\n", cpu->pc, instruction);
@@ -512,6 +532,7 @@ void decode_and_execute(CPUState *cpu, uint32_t *memory, uint32_t instruction) {
     }
 
     uint32_t op0 = (instruction >> 25) & 0xF; // Bits 28-25
+    printf("Instruction group: op0=0x%x\n", op0);
     switch (op0) {
         case 0x8: // Data Processing (Immediate)
         case 0x9:
@@ -532,8 +553,8 @@ void decode_and_execute(CPUState *cpu, uint32_t *memory, uint32_t instruction) {
             break;
         case 0xA: // Branches
         case 0xB:
-            branch_instruction(cpu, instruction);
-            printf("Branch instruction: 0x%08x\n", instruction);
+        printf("Branch instruction: 0x%08x\n", instruction);
+            branch_instruction(cpu, instruction);  
             break;
         default:
             printf("Unknown instruction group: op0=0x%x\n", op0);
@@ -541,13 +562,18 @@ void decode_and_execute(CPUState *cpu, uint32_t *memory, uint32_t instruction) {
     }
 }
 
+
+
 void emulate(CPUState *cpu, uint32_t *memory, size_t size) {
     while (cpu->pc < size * 4) {
         uint32_t instruction = memory[cpu->pc / 4];
+        printf("tf going on PC=0x%llx: 0x%08x\n", cpu->pc, instruction);
         decode_and_execute(cpu, memory, instruction);
         cpu->pc += 4; // Increment PC by 4 (size of an instruction)
+        printf("Updated PC: 0x%llx\n", cpu->pc);
         if (instruction == HALT) break; // Stop execution on HALT
     }
+    printf("Emulation complete.\n");
 }
 
 void output_state(CPUState *cpu, uint32_t *memory, size_t size) {
