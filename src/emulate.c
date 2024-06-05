@@ -480,7 +480,7 @@ void single_data_transfer(CPUState *cpu, uint32_t instruction) {
     }
 }
 
-
+//Only Here to compare code. functionallity merged with previous function
 void load_literal(CPUState *cpu, uint32_t instruction) {
     uint32_t sf = (instruction >> 30) & 0x1;      // Size flag (bit 30)
     int32_t simm19 = (instruction >> 5) & 0x7FFFF; // Signed immediate (bits 5-23)
