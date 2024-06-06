@@ -424,6 +424,16 @@ void single_data_transfer(CPUState *cpu, uint32_t instruction) {
         int64_t offset = (simm19 << 45) >> 45; // Sign-extend the 19-bit immediate
         address = cpu->pc + (offset * 4);
         printf("Literal load: simm19: %d, offset: %lld, address: 0x%llx\n", simm19, offset, address);
+         uint8_t *byte_memory = (uint8_t *)memory;
+            if (sf == 0) { // 32-bit load
+                data = *(uint32_t *)(byte_memory + address);
+                cpu->regs[Rt] = data;
+                printf("32-bit LOAD: X%d = [0x%llx] (data: 0x%x)\n", Rt, address, (uint32_t)data);
+            } else { // 64-bit load
+                data = *(uint64_t *)(byte_memory + address);
+                cpu->regs[Rt] = data;
+                printf("64-bit LOAD: X%d = [0x%llx] (data: %llu)\n", Rt, address, data);
+            }
     } else {
         // Handle non-literal load/store
         address = cpu->regs[Xn];
@@ -452,11 +462,13 @@ void single_data_transfer(CPUState *cpu, uint32_t instruction) {
 
     if (L) { // Load
         if (sf == 0) { // 32-bit load
-            data = memory[address / sizeof(uint32_t)] & 0xFFFFFFFF;
+            uint8_t *byte_memory = (uint8_t *)memory;
+            data = *(uint32_t *)(byte_memory + address);
             cpu->regs[Rt] = data;
             printf("32-bit LOAD: X%d = [0x%llx] (data: 0x%x)\n", Rt, address, (uint32_t)data);
         } else { // 64-bit load
-            data = *(uint64_t *)(memory + address / sizeof(uint32_t));
+            uint8_t *byte_memory = (uint8_t *)memory;
+            data = *(uint64_t *)(byte_memory + address);
             cpu->regs[Rt] = data;
             printf("64-bit LOAD: X%d = [0x%llx] (data: %llu)\n", Rt, address, data);
         }
