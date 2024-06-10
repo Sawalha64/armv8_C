@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <stdbool.h> 
+#include <stdbool.h>
 
 #define MEMORY_SIZE (2 * 1024 * 1024) // 2MB of memory
 #define HALT 0x8A000000
@@ -99,7 +99,7 @@ void arth_immediate(CPUState *cpu, uint32_t instruction) {
             set_flag(cpu, C_FLAG, operand1 >= operand2); // Carry flag
             set_flag(cpu, V_FLAG, ((int64_t)operand1 > 0 && (int64_t)operand2 < 0 && (int64_t)result < 0) ||
                                  ((int64_t)operand1 < 0 && (int64_t)operand2 > 0 && (int64_t)result > 0)); // Overflow flag
-                    
+
             break;
         default:
             printf("Unknown arithmetic immediate opcode: 0x%x\n", opc);
@@ -259,7 +259,7 @@ void arithmetic_instruction(CPUState *cpu, uint32_t instruction) {
             // Update PSTATE flags
             set_flag(cpu, N_FLAG, (sf == 0) ? (int32_t)result < 0 : (int64_t)result < 0); // Negative flag
             set_flag(cpu, Z_FLAG, result == 0); // Zero flag
-            set_flag(cpu, C_FLAG, operand1 > UINT64_MAX - operand_value); // Carry flag
+            set_flag(cpu, C_FLAG, (result < operand1)); // Carry flag
             set_flag(cpu, V_FLAG, ((int64_t)operand1 > 0 && (int64_t)operand_value > 0 && (int64_t)result < 0) ||
                                   ((int64_t)operand1 < 0 && (int64_t)operand_value < 0 && (int64_t)result > 0)); // Overflow flag
             break;
@@ -284,7 +284,7 @@ void arithmetic_instruction(CPUState *cpu, uint32_t instruction) {
     if (rd != 31) { //ZR Register Case
         cpu->regs[rd] = result;
     } else {
-        printf("Attempt to write to PC prevented. Result: 0x%llx\n", result);
+        printf("Attempt to write to ZR prevented. Result: 0x%llx\n", result);
     }
 
     printf("arithmetic_instruction: X%d = X%d %s X%d (result: %llu)\n", rd, rn, (opc & 0x2) ? "-" : "+", rm, result);
@@ -407,6 +407,8 @@ void single_data_transfer(CPUState *cpu, uint32_t instruction) {
     int32_t simm9 = (instruction >> 12) & 0x1FF;  // Signed 9-bit offset (bits 12-20)
     uint32_t Xn = (instruction >> 5) & 0x1F;      // Base register (bits 5-9)
     uint32_t Rt = instruction & 0x1F;             // Target register (bits 0-4)
+    uint32_t I = (instruction >> 11) & 0x1; // Index flag
+    uint8_t *byte_memory = (uint8_t *)memory;
     uint64_t address;
     uint64_t data;
 
@@ -424,26 +426,27 @@ void single_data_transfer(CPUState *cpu, uint32_t instruction) {
         int64_t offset = (simm19 << 45) >> 45; // Sign-extend the 19-bit immediate
         address = cpu->pc + (offset * 4);
         printf("Literal load: simm19: %d, offset: %lld, address: 0x%llx\n", simm19, offset, address);
-         uint8_t *byte_memory = (uint8_t *)memory;
-            if (sf == 0) { // 32-bit load
-                data = *(uint32_t *)(byte_memory + address);
-                cpu->regs[Rt] = data;
-                printf("32-bit LOAD: X%d = [0x%llx] (data: 0x%x)\n", Rt, address, (uint32_t)data);
-            } else { // 64-bit load
-                data = *(uint64_t *)(byte_memory + address);
-                cpu->regs[Rt] = data;
-                printf("64-bit LOAD: X%d = [0x%llx] (data: %llu)\n", Rt, address, data);
-            }
+        if (sf == 0) { // 32-bit load
+            data = *(uint32_t *)(byte_memory + address);
+            cpu->regs[Rt] = data;
+            printf("32-bit LOAD: X%d = [0x%llx] (data: 0x%x)\n", Rt, address, (uint32_t)data);
+        } else { // 64-bit load
+            data = *(uint64_t *)(byte_memory + address);
+            cpu->regs[Rt] = data;
+            printf("64-bit LOAD: X%d = [0x%llx] (data: %llu)\n", Rt, address, data);
+        }
     } else {
         // Handle non-literal load/store
         address = cpu->regs[Xn];
         printf("Non-literal load/store: initial address: 0x%llx\n", address);
         if (U) { // Unsigned Offset
-            printf("hi address = %llx offset = %llx\n",address,offset);
-            address += (offset * 8);
+            if (sf == 0) { // 32-bit variant
+                address += (offset * 4);
+            } else { // 64-bit variant
+                address += (offset * 8);
+            }
             printf("Unsigned Offset: new address: 0x%llx\n", address);
         } else {
-            uint32_t I = (instruction >> 24) & 0x1; // Index flag
             if (R) { // Register Offset
                 uint32_t Xm = (instruction >> 16) & 0x1F; // Offset register
                 address += cpu->regs[Xm];
@@ -458,60 +461,35 @@ void single_data_transfer(CPUState *cpu, uint32_t instruction) {
                 }
             }
         }
-    }
-
-    if (L) { // Load
-        if (sf == 0) { // 32-bit load
-            uint8_t *byte_memory = (uint8_t *)memory;
-            data = *(uint32_t *)(byte_memory + address);
-            cpu->regs[Rt] = data;
-            printf("32-bit LOAD: X%d = [0x%llx] (data: 0x%x)\n", Rt, address, (uint32_t)data);
-        } else { // 64-bit load
-            uint8_t *byte_memory = (uint8_t *)memory;
-            data = *(uint64_t *)(byte_memory + address);
-            cpu->regs[Rt] = data;
-            printf("64-bit LOAD: X%d = [0x%llx] (data: %llu)\n", Rt, address, data);
+        if (L) { // Load
+            if (sf == 0) { // 32-bit load
+                data = *(uint32_t *)(byte_memory + address);
+                cpu->regs[Rt] = data;
+                printf("32-bit LOAD: X%d = [0x%llx] (data: 0x%x)\n", Rt, address, (uint32_t)data);
+            } else { // 64-bit load
+                data = *(uint64_t *)(byte_memory + address);
+                cpu->regs[Rt] = data;
+                printf("64-bit LOAD: X%d = [0x%llx] (data: %llu)\n", Rt, address, data);
+            }
+        } else { // Store
+            if (sf == 0) { // 32-bit store
+                data = cpu->regs[Rt] & 0xFFFFFFFF;
+                *(uint32_t *)(byte_memory + address) = data;
+                printf("32-bit STORE: [0x%llx] = X%d (data: 0x%x)\n", address, Rt, (uint32_t)data);
+            } else { // 64-bit store
+                data = cpu->regs[Rt];
+                *(uint64_t *)(byte_memory + address) = data;
+                printf("64-bit STORE: [0x%llx] = X%d (data: %llu)\n", address, Rt, data);
+            }
         }
-    } else { // Store
-        if (sf == 0) { // 32-bit store
-            data = cpu->regs[Rt] & 0xFFFFFFFF;
-            memory[address / sizeof(uint32_t)] = data;
-            printf("32-bit STORE: [0x%llx] = X%d (data: 0x%x)\n", address, Rt, (uint32_t)data);
-        } else { // 64-bit store
-            data = cpu->regs[Rt];
-            *(uint64_t *)(memory + address / sizeof(uint32_t)) = data;
-            printf("64-bit STORE: [0x%llx] = X%d (data: %llu)\n", address, Rt, data);
+        // Handle post-index addressing mode
+        if (!literal && !U && !R && !I) {
+            cpu->regs[Xn] += simm9; // Update base register with signed offset
+            printf("Post-Indexed Update: new base register X%d: 0x%llx\n", Xn, cpu->regs[Xn]);
         }
-    }
-
-    // Handle post-index addressing mode
-    if (!literal && !U && !R) {
-        printf("why we here");
-        cpu->regs[Xn] += simm9; // Update base register with signed offset
-        printf("Post-Indexed Update: new base register X%d: 0x%llx\n", Xn, cpu->regs[Xn]);
     }
 }
 
-//Only Here to compare code. functionallity merged with previous function
-void load_literal(CPUState *cpu, uint32_t instruction) {
-    uint32_t sf = (instruction >> 30) & 0x1;      // Size flag (bit 30)
-    int32_t simm19 = (instruction >> 5) & 0x7FFFF; // Signed immediate (bits 5-23)
-    uint32_t Rt = instruction & 0x1F;             // Target register (bits 0-4)
-
-    // Sign-extend the 19-bit immediate
-    int64_t offset = (simm19 << 45) >> 45;
-    uint64_t address = cpu->pc + (offset * 4);
-    uint64_t data;
-
-    if (sf == 0) { // 32-bit load
-        data = memory[address / sizeof(uint32_t)] & 0xFFFFFFFF;
-        cpu->regs[Rt] = data;
-    } else { // 64-bit load
-        data = *(uint64_t *)(memory + address / sizeof(uint32_t));
-        cpu->regs[Rt] = data;
-    }
-    printf("LOAD_LITERAL: X%d = [PC + %lld] (address: 0x%llx, data: %llu)\n", Rt, offset, address, data);
-}
 
 void branch_instruction(CPUState *cpu, uint32_t instruction) {
     uint32_t op = (instruction >> 26) & 0x3F; // Bits 31-26
@@ -538,7 +516,7 @@ void branch_instruction(CPUState *cpu, uint32_t instruction) {
         case 0x15: // Conditional branch
             simm19 = (instruction >> 5) & 0x7FFFF; // Bits 23-5
             uint32_t cond = instruction & 0xF;     // Bits 3-0
-            offset = (int64_t)simm19 << 2;
+            offset = (int64_t)((simm19 << 45) >> 45) << 2;
             if (check_condition(cpu, cond)) {
                 printf("Condition met for branch: cond=0x%x, offset=0x%llx\n", cond, offset);
                 cpu->pc += offset - 4; // Set the PC to the target address
@@ -559,7 +537,7 @@ int check_condition(CPUState *cpu, uint32_t cond) {
     uint32_t Z = (cpu->pstate >> Z_FLAG) & 1;
     uint32_t N = (cpu->pstate >> N_FLAG) & 1;
     uint32_t V = (cpu->pstate >> V_FLAG) & 1;
-    uint32_t C = (cpu->pstate >> C_FLAG) & 1; // Ensure we also read the carry flag
+    uint32_t C = (cpu->pstate >> C_FLAG) & 1;
 
     switch (cond) {
         case 0x0: return Z == 1;                        // EQ: Equal
@@ -582,7 +560,7 @@ int check_condition(CPUState *cpu, uint32_t cond) {
 }
 
 void decode_and_execute(CPUState *cpu, uint32_t *memory, uint32_t instruction) {
-    printf("Decoding instruction at PC=0x%llx: 0x%08x\n", cpu->pc, instruction);
+    printf("\nDecoding instruction at PC=0x%llx: 0x%08x\n", cpu->pc, instruction);
     if (instruction == HALT) {
         printf("HALT instruction executed at PC=0x%llx\n", cpu->pc);
         return;
@@ -609,15 +587,13 @@ void decode_and_execute(CPUState *cpu, uint32_t *memory, uint32_t instruction) {
         case 0xA: // Branches
         case 0xB:
         printf("Branch instruction: 0x%08x\n", instruction);
-            branch_instruction(cpu, instruction);  
+            branch_instruction(cpu, instruction);
             break;
         default:
-            printf("Unknown instruction group: op0=0x%x\n", op0);
+            printf("Unknown instrucstion group: op0=0x%x\n", op0);
             break;
     }
 }
-
-
 
 void emulate(CPUState *cpu, uint32_t *memory, size_t size) {
     while (cpu->pc < size * 4) {
@@ -638,7 +614,7 @@ void output_state(CPUState *cpu, uint32_t *memory, size_t size) {
     printf("PC = %016llx\n\n", cpu->pc-4);
     printf("PSTATE : %s\n", pstate_str); // Use formatted PSTATE string
     printf("Non-Zero Memory:\n");
-    for (size_t i = 0; i < size; i++) {
+    for (size_t i = 0; i < (size + MEMORY_SIZE / sizeof(uint32_t)); i++) {
         if (memory[i] != 0) {
             printf("0x%08lx: 0x%08x\n", i * 4, memory[i]);
         }
