@@ -27,9 +27,9 @@ void init_cpu(CPUState *cpu) {
 
 void set_flag(CPUState *cpu, int flag_pos, int condition) {
     if (condition) {
-        cpu->pstate |= (1 << flag_pos); // Set the flag bit
+        cpu->pstate |= (1 << flag_pos); // Set flag
     } else {
-        cpu->pstate &= ~(1 << flag_pos); // Clear the flag bit
+        cpu->pstate &= ~(1 << flag_pos); // Clear flag
     }
 }
 

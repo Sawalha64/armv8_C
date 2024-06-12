@@ -9,7 +9,7 @@
 #define V_FLAG 0 // Overflow
 
 typedef struct {
-    uint64_t regs[31]; // General-purpose registers X0-X30
+    uint64_t regs[31]; // General purpose registers X0-X30
     uint64_t zr;       // Zero register
     uint64_t pc;       // Program Counter
     uint32_t pstate;   // Processor state (NZCV)
