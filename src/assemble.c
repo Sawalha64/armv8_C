@@ -162,6 +162,93 @@ unsigned int arithmeticInstructions(char *mnemonic, char *rd, char *rn, char *op
     return instruction;
 }
 
+// Function to encode a single data transfer instruction
+unsigned int logicalInstructions(char *mnemonic, char *rd, char *rn, char *operand, char *remainder) {
+    printf("Encoding logical instruction: %s %s %s %s %s\n", mnemonic, rd, rn, operand, remainder);
+    unsigned int instruction = 0;
+    unsigned int sf = 0;
+    unsigned int opc = 0;
+    unsigned int shiftAmount = 0;
+    unsigned int imm12 = 0;
+    unsigned int opVal = parseOperand(operand, &sf);
+    unsigned int Rn = parseOperand(rn, &sf);
+    unsigned int Rd = parseOperand(rd, &sf);
+    unsigned int shiftCode = 0;
+    unsigned int N = 0;
+    if ((strcmp(mnemonic, "and") == 0)
+    && (strcmp(rd, "x0") == 0)
+    && (strcmp(rn, "x0") == 0)
+    && (strcmp(operand, "x0") == 0)) {
+        return 0x8A000000;
+    } else if (strcmp(mnemonic, "tst") == 0) {
+        mnemonic = "ands";
+        char *zr = "w31";
+        return logicalInstructions(mnemonic, zr, rd, rn, NULL);
+    }
+    if (strcmp(mnemonic, "and") == 0) {
+            opc = 0b00;
+        } else if (strcmp(mnemonic, "bic") == 0) {
+            opc = 0b00;
+            N = 1;
+        } else if (strcmp(mnemonic, "orr") == 0) {
+            opc = 0b01;
+        } else if (strcmp(mnemonic, "orn") == 0) {
+            opc = 0b01;
+            N = 1;
+        } else if (strcmp(mnemonic, "eor") == 0) {
+            opc = 0b10;
+        } else if (strcmp(mnemonic, "eon") == 0) {
+            opc = 0b10;
+            N = 1;
+        } else if (strcmp(mnemonic, "ands") == 0) {
+            opc = 0b11;
+        } else if (strcmp(mnemonic, "bics") == 0) {
+            opc = 0b11;
+            N = 1;
+    }
+    // Check if operand is an immediate value
+    if (strchr(operand, '#') != NULL) {
+        printf("Operand is an immediate value: %s\n", operand);
+        unsigned int imm = parseOperand(operand, NULL);
+        if (remainder != NULL) {
+            char *shiftType = strtok(remainder, " \t\n");
+            char *shiftVal = strtok(NULL, " \t\n");
+            printf("Remainder: %s\n", remainder);
+            shiftAmount = parseOperand(shiftVal, NULL);
+            if (shiftAmount != 0) {
+                printf("how tf we here\n");
+            }
+        } 
+        imm12 = opVal;
+        // NOT CURRENTLY WORKING
+        instruction = (sf << 31) | (opc << 29) | (0b100 << 26) | (shiftAmount << 22) | ((imm & 0xFFF) << 10) | (Rn << 5) | Rd;
+    } else {
+        if (remainder != NULL) {
+            printf("Processing remainder: %s\n", remainder);
+            char *shiftType = strtok(remainder, " \t\n");
+            char *shiftVal = strtok(NULL, " \t\n");
+            shiftAmount = parseOperand(shiftVal, NULL);
+            if (strcmp(shiftType, "lsl") == 0) {
+                shiftCode = 0b000;
+            } else if (strcmp(shiftType, "lsr") == 0) {
+                shiftCode = 0b001;
+            } else if (strcmp(shiftType, "asr") == 0) {
+                shiftCode = 0b010;
+            } else if (strcmp(shiftType, "ror") == 0) {
+                shiftCode = 0b011; //
+            } else {
+                exit(EXIT_FAILURE);
+            }
+        }
+        printf("Operand is a register: %s\n", operand);
+        unsigned int Rm = parseOperand(operand, &sf);
+        instruction = (sf << 31) | (opc << 29) | (0 << 28) | (0b101 << 25) | (shiftCode << 22) | (N << 21) | (Rm << 16) | (shiftAmount << 10) | (Rn << 5) | Rd;
+    }
+
+    printf("Encoded instruction: 0x%X\n", instruction);
+    return instruction;
+}
+
 // Function to process each line and determine if it is a label, instruction, or directive, NEEDS FIXING
 void processLine(char *line, int address) {
     char *token = strtok(line, " \t\n");
@@ -269,7 +356,10 @@ void assemble(char *inputFileName, char *outputFileName) {
             strncmp(mnemonic, "eo", 2) == 0  ||
             strncmp(mnemonic, "tst", 3) == 0
             ) {
-            // TODO
+            char *operand = strtok(NULL, ", \t\n");
+            char *remainder = strtok(NULL, "");
+            printf("%s", line);
+            binaryInstruction = logicalInstructions(mnemonic, rd, rn, operand, remainder);
         }
 
         printf("Writing binary instruction: 0x%X\n", binaryInstruction);
