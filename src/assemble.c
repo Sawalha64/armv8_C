@@ -489,6 +489,89 @@ int singleDataTransfer(char *mnemonic, char *rt, char *rn, char *remainder, int 
     return instruction;
 }
 
+// Function to encode a branch instruction
+int encodeBranchInstruction(char *mnemonic, char *address, int lineNo) {
+    int instruction = 0;
+    int offset = 0;
+    int neg = 0;
+    int label = labelExists(address);
+
+    if (label) {
+        offset = getLabelAddress(address);
+        printf("\n label: %d, LineNo: %d\n", offset/4, lineNo);
+        offset -= (lineNo * 4);
+        offset /= 4;
+        printf("\n Offset: %d\n",offset);
+        if (offset < 0) {
+            offset *= -1;
+            neg = 1;
+        }
+    } else {
+        offset = parseOperand(address, NULL);
+    }
+
+    if (strcmp(mnemonic, "b") == 0) { // Unconditional branch
+        printf("Unconditional\n");
+        if (neg == 0) {
+            instruction = (0b000101 << 26) | offset;
+        } else {
+            instruction = (0b000101 << 26) | (1 << 25) | ((~offset + 1) & 0x1FFFFFF);
+        }
+
+    } else if (strcmp(mnemonic, "br") == 0) { // Register branch
+        printf("Register\n");
+        if (neg == 0) {
+            instruction = (0b1101011000011111000000 << 10) | (offset << 5) | 0b0000;
+        } else {
+            instruction = (0b1101011000011111000000 << 10) | (1 << 9) | (((~offset + 1) & 0xF) << 5) | 0b0000;
+        }
+    } else { // Conditional branch
+        printf("Conditional\n");
+        char condition[10];
+        char *dotPosition = strchr(mnemonic, '.');
+        if (dotPosition != NULL) {
+            strcpy(condition, dotPosition + 1);
+        }
+        printf("condition: %s\n", condition);
+        int code = -1;
+        if (strcmp(condition, "eq") == 0) {
+            code = 0x0; // Equal (Z == 1)
+        } else if (strcmp(condition, "ne") == 0) {
+            code = 0x1; // Not equal (Z == 0)
+        } else if (strcmp(condition, "ge") == 0) {
+            code = 0xA; // Signed greater or equal (N == 1)
+        } else if (strcmp(condition, "lt") == 0) {
+            code = 0xB; // Signed less than (N != 1)
+        } else if (strcmp(condition, "gt") == 0) {
+            code = 0xC; // Signed greater than (Z == 0 && N == V)
+        } else if (strcmp(condition, "le") == 0) {
+            code = 0xD; // Signed less than or equal (!(Z == 0 && N == V))
+        } else if (strcmp(condition, "al") == 0) {
+            code = 0xE; // Always (any)
+        } else {
+            printf("Unknown condition: %s\n", condition);
+        }
+        
+        if (neg == 0) {
+            instruction = (0b01010100 << 24) | (offset << 5) | (0 << 4) | code;
+        } else {
+            instruction = (0b01010100 << 24) | (1 << 23) | (((~offset + 1) & 0x7FFFF) << 5) | (0 << 4) | code;
+        }
+    }
+
+    printf("Encoding branch instruction: %s %s\n", mnemonic, address);
+    return instruction;
+}
+
+// Function to encode a special directive
+int encodeDirective(char *directive, char *value) {
+    printf("Encoding directive: %s %s\n", directive, value);
+    if (strcmp(directive, ".int") == 0) {
+        return (int)strtol(value, NULL, 0);
+    }
+    return 0;
+}
+
 // Function to process each line and determine if it is a label, instruction, or directive
 int processLine(char *line, int address) {
     char *token = strtok(line, " \t\n");
@@ -593,12 +676,12 @@ void assemble(char *inputFileName, char *outputFileName) {
             strcmp(mnemonic, "br") == 0 ||
             strncmp(mnemonic, "b.", 2) == 0
             ) {
-            // TODO
+            binaryInstruction = encodeBranchInstruction(mnemonic, rd, lineNo);
         } 
         else if (
             strncmp(mnemonic, ".int", 3) == 0
             ) {
-            // TODO
+            binaryInstruction = encodeDirective(mnemonic, rd);
         } 
         else if (
             strncmp(mnemonic, "and", 3) == 0 || 
