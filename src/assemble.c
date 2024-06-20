@@ -29,6 +29,28 @@ void addLabel(char *label, int address) {
     labelCount++;
 }
 
+int labelExists(const char *label) {
+    for (int i = 0; i < labelCount; i++) {
+        if (strcmp(symbolTable[i].label, label) == 0) {
+            return 1; // Label exists
+        }
+    }
+    return 0; // Label does not exist
+}
+
+// Function to get the address of a label
+int getLabelAddress(char *label) {
+    printf("Getting address for label: %s\n", label);
+    for (int i = 0; i < labelCount; i++) {
+        if (strcmp(symbolTable[i].label, label) == 0) {
+            printf("Found label: %s at address: %d\n", label, symbolTable[i].address);
+            return symbolTable[i].address;
+        }
+    }
+    printf("Label not found: %s\n", label);
+    return -1; // Label not found
+}
+
 // Function to parse and add instruction
 void addInstruction(char *line, int address) {
     printf("Adding instruction: %s at address: %d\n", line, address);
@@ -51,13 +73,13 @@ int parseOperand(char *operand, int *sf) {
         printf("Parsing immediate value: %s\n", operand);
         return strtoul(&operand[1], NULL, 0);
     } else if (operand[0] == 'x') {
-        printf("Parsing register: %s\n", operand);
+        printf("Parsing X register: %s\n", operand);
         if (sf != NULL) {
             *sf = 1;
         }
         return atoi(&operand[1]);
     } else if (operand[0] == 'w') {
-        printf("Parsing register: %s\n", operand);
+        printf("Parsing W register: %s\n", operand);
         return atoi(&operand[1]);
     } else {
         printf("Parsing immediate value: %s\n", operand);
@@ -84,7 +106,6 @@ int arithmeticInstructions(char *mnemonic, char *rd, char *rn, char *operand, ch
         char *zr = "xzr";
         if (remainder != NULL) {
             char input[30];
-            printf("operand: %s, remainder: %s\n", operand, remainder);
             sprintf(input, "%s %s", operand, remainder);
             return arithmeticInstructions(mnemonic, zr, rd, rn, input);
         } else {
@@ -95,7 +116,6 @@ int arithmeticInstructions(char *mnemonic, char *rd, char *rn, char *operand, ch
         char *zr = "xzr";
         if (remainder != NULL) {
             char input[30];
-            printf("operand: %s, remainder: %s\n", operand, remainder);
             sprintf(input, "%s %s", operand, remainder);
             return arithmeticInstructions(mnemonic, zr, rd, rn, input);
         } else {
@@ -117,10 +137,8 @@ int arithmeticInstructions(char *mnemonic, char *rd, char *rn, char *operand, ch
         if (remainder != NULL) {
             char *shiftType = strtok(remainder, " \t\n");
             char *shiftVal = strtok(NULL, " \t\n");
-            printf("Remainder: %s\n", remainder);
             shiftAmount = parseOperand(shiftVal, NULL);
             if (shiftAmount != 0) {
-                printf("how tf we here\n");
                 sh = 1;
             }
         } 
@@ -136,14 +154,12 @@ int arithmeticInstructions(char *mnemonic, char *rd, char *rn, char *operand, ch
             opc = 0b011;
         }
 
-        printf("Instruction encoding fields: sf=%d opc=%d sh=%d imm12=%d Rn=%d Rd=%d shiftAmount=%d\n", sf, opc, sh, imm12, Rn, Rd, shiftAmount);
         instruction = (sf << 31) | (opc << 29) | (0b100 << 26) | (0b010 << 23) | (sh << 22) | ((imm12 & 0xFFF) << 10) | (Rn << 5) | Rd;
     } else {
         printf("Operand is a register: %s\n", operand);
         rm = parseOperand(operand, &sf);
         int shiftCode = 8;
         if (remainder != NULL) {
-            printf("Processing remainder: %s\n", remainder);
             char *shiftType = strtok(remainder, " \t\n");
             char *shiftVal = strtok(NULL, " \t\n");
             shiftAmount = parseOperand(shiftVal, NULL);
@@ -168,7 +184,6 @@ int arithmeticInstructions(char *mnemonic, char *rd, char *rn, char *operand, ch
         } else if (strcmp(mnemonic, "subs") == 0) {
             opc = 0b011;
         }
-        printf("Instruction encoding fields: sf=%d opc=%d rm=%d shiftAmount=%d Rn=%d Rd=%d\n", sf, opc, rm, shiftAmount, Rn, Rd);
         instruction = (sf << 31) | (opc << 29) | (0 << 28) | (0b101 << 25) | (shiftCode << 21) | (rm << 16) | (shiftAmount << 10) | (Rn << 5) | Rd;
     }
 
@@ -190,7 +205,6 @@ int logicalInstructions(char *mnemonic, char *rd, char *rn, char *operand, char 
         char *zr = "w31";
             if (remainder != NULL) {
             char input[30];
-            printf("operand: %s, remainder: %s\n", operand, remainder);
             sprintf(input, "%s %s", operand, remainder);
             return logicalInstructions(mnemonic, zr, rd, rn, input);
         } else {
@@ -238,14 +252,11 @@ int logicalInstructions(char *mnemonic, char *rd, char *rn, char *operand, char 
         if (remainder != NULL) {
             char *shiftType = strtok(remainder, " \t\n");
             char *shiftVal = strtok(NULL, " \t\n");
-            printf("Remainder: %s\n", remainder);
             shiftAmount = parseOperand(shiftVal, NULL);
             if (shiftAmount != 0) {
-                printf("how tf we here\n");
             }
         } 
         imm12 = opVal;
-        // NOT CURRENTLY WORKING
         instruction = (sf << 31) | (opc << 29) | (0b100 << 26) | (shiftAmount << 22) | ((imm & 0xFFF) << 10) | (Rn << 5) | Rd;
     } else {
         if (remainder != NULL) {
@@ -265,7 +276,6 @@ int logicalInstructions(char *mnemonic, char *rd, char *rn, char *operand, char 
                 exit(EXIT_FAILURE);
             }
         }
-        printf("Operand is a register: %s\n", operand);
         int Rm = parseOperand(operand, &sf);
         instruction = (sf << 31) | (opc << 29) | (0 << 28) | (0b101 << 25) | (shiftCode << 22) | (N << 21) | (Rm << 16) | (shiftAmount << 10) | (Rn << 5) | Rd;
     }
@@ -298,7 +308,6 @@ int multiplicationInstructions(char *mnemonic, char *rd, char *rn, char *rm, cha
 
     instruction = (sf << 31) | (0b0011011000 << 21) | (Rm << 16) | (x << 15) | (Ra << 10) | (Rn << 5) | Rd;
 
-    printf("Encoded instruction???????: 0x%X\n", Rm);
     return instruction;
 }
 
@@ -333,7 +342,6 @@ int movInstructions(char *mnemonic, char *rd, char *operand, char *remainder) {
     if (remainder != NULL) {
             char *shiftType = strtok(remainder, " \t\n");
             char *shiftVal = strtok(NULL, " \t\n");
-            printf("Remainder: %s\n", remainder);
             shiftAmount = parseOperand(shiftVal, NULL);
             if (shiftAmount != 0) {
                 printf("shift > 0\n");
@@ -341,25 +349,161 @@ int movInstructions(char *mnemonic, char *rd, char *operand, char *remainder) {
             shiftAmount /= 16;
         } 
     imm16 = parseOperand(operand, NULL);
-    printf("sf: %d, opc: %d, opi: %d, shiftam: %d, imm16: %d, Rd: %d", sf, opc, opi, shiftAmount, imm16, Rd);
     instruction = (sf << 31) | (opc << 29) | (0b100 << 26) | (opi << 23) | (shiftAmount << 21) | (imm16 << 5) | Rd;
+
+    printf("Encoded instruction: 0x%X\n", instruction);
+    return instruction;
+}
+void parseAddressingMode(char *input, int *reg, int *offset, int *preIndex, int *sf, int registerOn) {
+    // Remove the square brackets
+    char *start = strchr(input, '[');
+    char *end = strchr(input, ']');
+    if (start && end) {
+        *start = ' ';
+        *end = ' ';
+    }
+    if (registerOn) {
+            char *token = strtok(input, ", \t\n");
+            if (token) {
+                *reg = parseOperand(token, NULL);
+            }
+            token = strtok(NULL, " ,#");
+            if (token) {
+                *offset = parseOperand(token, NULL);
+            }
+    } else {
+        char *exclamation = strchr(input, '!');
+        if (exclamation == NULL) {
+            *preIndex = 0;  // Post-indexing or offset
+        } else {
+            *preIndex = 1;
+            exclamation = ' ';
+        }
+        char *token = strtok(input, " ,#");
+        if (token) {
+            *reg = parseOperand(token, NULL);
+        }
+
+        token = strtok(NULL, " ,#");
+        if (token != NULL) {
+            *offset = parseOperand(token, NULL);
+        } else {
+            *offset = 0;//
+        }
+    }
+}
+
+int singleDataTransfer(char *mnemonic, char *rt, char *rn, char *remainder, int lineNo) {
+    printf("\nEncoding single data transfer instruction: %s %s %s %s\n", mnemonic, rt, rn, remainder ? remainder : "NULL");
+
+    int instruction = 0;
+    int sf = 0;  // Size flag (0 for 32-bit, 1 for 64-bit)
+    int L = 0; // Load/store flag
+    int offset = 0; // Immediate offset value
+    int labeloffset = 0;
+    int preIndex = 0;
+    int Rn = -1;
+    int U = 0;
+    int Rt = parseOperand(rt, &sf);
+    int neg = 0;
+    int label = labelExists(rn);
+
+    if (label) {
+        labeloffset = getLabelAddress(rn);
+        printf("\n label: %d, LineNo: %d\n", labeloffset/4, lineNo);
+        labeloffset -= (lineNo * 4);
+        labeloffset /= 4;
+        printf("\n Offset: %d\n",labeloffset);
+        if (labeloffset < 0) {
+            labeloffset *= -1;
+            neg = 1;
+        }
+    }
+
+
+    printf("\nmnemonic: %s, rt: %s, rn: %s, remainder: %s\n", mnemonic, rt, rn, remainder);
+
+    if (strcmp(mnemonic, "str") == 0) {
+        L = 0b0; // STR operation code
+        printf("Operation: STR\n");
+    } else if (strcmp(mnemonic, "ldr") == 0) {
+        L = 0b1; // LDR operation code
+        printf("Operation: LDR\n");
+    } else {
+        printf("Unsupported mnemonic: %s\n", mnemonic);
+        exit(EXIT_FAILURE);
+    }
+
+    if (rn[0] == '#' || label) { // Literal Load NEEDS TO BE CHANGED LATER TO COMPENSATE FOR LABELS
+        printf("Literal:\n");
+        if (label) {
+            offset = labeloffset;
+        } else {
+            offset = parseOperand(rn, NULL); // Need negatives
+        }
+        if (neg) {
+            instruction = (0 << 31) | (sf << 30) | (0b011000 << 24) | (1 << 23) | (((~offset + 1) & 0x7FFFF) << 5) | Rt;
+        } else {
+            instruction = (0 << 31) | (sf << 30) | (0b011000 << 24) | (offset << 5) | Rt;
+        }
+        printf("Literal Load: Offset = %d\n", offset);
+    } else if (remainder == NULL || (strchr(remainder, '#') != NULL && strchr(remainder, ']') != NULL && strchr(remainder, '!') == NULL)) { // Offset
+        char input[20];
+        sprintf(input, "%s, %s", rn, remainder);
+        parseAddressingMode(input, &Rn, &offset, &preIndex, &sf, 0);
+        if (sf) {
+            offset /= 8;
+        } else {
+            offset /= 4;
+        }
+        U = 1;
+        instruction = (1 << 31) | (sf << 30) | (0b11100 << 25) | (U << 24) | (0 << 23) | (L << 22) | (offset << 10) | (Rn << 5) | Rt;
+    } else if (strchr(remainder, '!') != NULL) { // Pre-Index
+        printf("preIndex:\n");
+        char *input = strcat(rn, remainder);
+        parseAddressingMode(input, &Rn, &offset, &preIndex, &sf, 0);
+        instruction = (1 << 31) | (sf << 30) | (0b11100 << 25) | (U << 24) | (0 << 23) | (L << 22) | (0 << 21) | (offset << 12) | (preIndex << 11) | (1 << 10) | (Rn << 5) | Rt;
+        printf("Pre-Index: Rn = %d, Offset = %d\n", Rn, offset);
+    } else if (strchr(remainder, ']') == NULL) { // Post-Index
+        printf("POST INDEX\n");
+        parseAddressingMode(rn, &Rn, &offset, &preIndex, &sf, 1); // Offset should be 0
+        char *off = strtok(remainder, " \t\n");
+        offset = parseOperand(off, NULL);
+        if (offset < 0) {
+            offset *= -1;
+            instruction = (1 << 31) | (sf << 30) | (0b11100 << 25) | (U << 24) | (0 << 23) | (L << 22) | (0 << 21) | (1 << 20) | (((~offset + 1) & 0xFF) << 12) | (preIndex << 11) | (1 << 10) | (Rn << 5) | Rt;
+        } else {
+            instruction = (1 << 31) | (sf << 30) | (0b11100 << 25) | (U << 24) | (0 << 23) | (L << 22) | (0 << 21) | (offset << 12) | (preIndex << 11) | (1 << 10) | (Rn << 5) | Rt;
+            printf("Post-Index: Rn = %d, Offset = %d\n", Rn, offset);
+        }
+    } else { // Register
+        printf("Register\n");
+        char *start = strchr(rn, '[');
+        char string[20];
+        sprintf(string, "%s, %s", rn, remainder);
+        parseAddressingMode(string, &Rn, &offset, &preIndex, &sf, 1); // Offset should be 0
+        instruction = (1 << 31) | (sf << 30) | (0b11100 << 25) | (U << 24) | (0 << 23) | (L << 22) | (1 << 21) | (offset << 16) | (0b011010 << 10) | (Rn << 5) | Rt;
+    }
 
     printf("Encoded instruction: 0x%X\n", instruction);
     return instruction;
 }
 
 // Function to process each line and determine if it is a label, instruction, or directive
-void processLine(char *line, int address) {
+int processLine(char *line, int address) {
     char *token = strtok(line, " \t\n");
-    if (token == NULL) return;
+    if (token == NULL) return 1;
 
     if (strchr(token, ':') != NULL) {
         // It's a label
         token[strlen(token) - 1] = '\0'; // Remove the colon
+        printf("\n labelname: %s\n", token);
         addLabel(token, address);
+        return 1;
     } else {
         // It's an instruction or directive
         addInstruction(line, address);
+        return 0;
     }
 }
 
@@ -376,8 +520,10 @@ void assemble(char *inputFileName, char *outputFileName) {
 
     // First pass: Create symbol table
     while (fgets(line, sizeof(line), inputFile)) {
-        processLine(line, address);
-        address += 4; // Each instruction is 4 bytes
+        int blank = processLine(line, address);
+        if (blank != 1) {
+            address += 4; // Each instruction is 4 bytes
+        }
     }
     fclose(inputFile);
 
@@ -393,6 +539,7 @@ void assemble(char *inputFileName, char *outputFileName) {
         exit(EXIT_FAILURE);
     }
 
+    int lineNo = 0;
     // Second pass: Encode instructions
     while (fgets(line, sizeof(line), inputFile)) {
         char *token = strtok(line, " \t\n");
@@ -402,11 +549,10 @@ void assemble(char *inputFileName, char *outputFileName) {
             // It's a label, skip it
             continue;
         }
-        char *mnemonic = token;
         int binaryInstruction = 0;
+        char *mnemonic = token;
         char *rd = strtok(NULL, ", \t\n");
         char *rn = strtok(NULL, ", \t\n");
-        
         
         if (
             strncmp(mnemonic, "add", 3) == 0 || 
@@ -439,15 +585,18 @@ void assemble(char *inputFileName, char *outputFileName) {
             strcmp(mnemonic, "ldr") == 0 || 
             strcmp(mnemonic, "str") == 0
         ) {
-            // TODO
+            char *remainder = strtok(NULL, "");
+            binaryInstruction = singleDataTransfer(mnemonic, rd, rn, remainder, lineNo);
         } 
         else if (
-            strcmp(mnemonic, "b") == 0
+            strcmp(mnemonic, "b") == 0  ||
+            strcmp(mnemonic, "br") == 0 ||
+            strncmp(mnemonic, "b.", 2) == 0
             ) {
             // TODO
         } 
         else if (
-            mnemonic[0] == '.'
+            strncmp(mnemonic, ".int", 3) == 0
             ) {
             // TODO
         } 
@@ -460,12 +609,11 @@ void assemble(char *inputFileName, char *outputFileName) {
             ) {
             char *operand = strtok(NULL, ", \t\n");
             char *remainder = strtok(NULL, "");
-            printf("%s", line);
             binaryInstruction = logicalInstructions(mnemonic, rd, rn, operand, remainder);
         }
-
         printf("Writing binary instruction: 0x%X\n", binaryInstruction);
         fwrite(&binaryInstruction, sizeof(int), 1, outputFile);
+        lineNo++;
     }
 
     fclose(inputFile);
