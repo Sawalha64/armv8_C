@@ -1,5 +1,6 @@
 #define MAX_LABELS 1024
 #define MAX_LINE_LENGTH 256
+#define MEMORY_OFFSET 0
 
 typedef struct {
     char label[MAX_LINE_LENGTH];

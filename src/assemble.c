@@ -71,7 +71,7 @@ int parseOperand(char *operand, int *sf) {
 int arithmeticInstructions(char *mnemonic, char *rd, char *rn, char *operand, char *remainder) {
     printf("Encoding data processing instruction: %s %s %s %s %s\n", mnemonic, rd, rn, operand, remainder);
     int instruction = 0;
-    int sf = 0;  // Default to 64-bit
+    int sf = 0;
     int opc = 0;
     int shiftAmount = 0;
     int imm12 = 0;
@@ -553,7 +553,7 @@ void assemble(char *inputFileName, char *outputFileName) {
     }
 
     char line[MAX_LINE_LENGTH];
-    int address = 0;
+    int address = MEMORY_OFFSET;
 
     // First pass: Create symbol table
     while (fgets(line, sizeof(line), inputFile)) {
@@ -577,6 +577,7 @@ void assemble(char *inputFileName, char *outputFileName) {
     }
 
     int lineNo = 0;
+    fseek(outputFile,MEMORY_OFFSET*4,SEEK_SET);
     // Second pass: Encode instructions
     while (fgets(line, sizeof(line), inputFile)) {
         char *token = strtok(line, " \t\n");

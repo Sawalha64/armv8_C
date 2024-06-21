@@ -1,6 +1,7 @@
 #include <stdint.h>
 
 #define MEMORY_SIZE (2 * 1024 * 1024) // 2MB of memory
+#define MEMORY_OFFSET 0 // Offsets by MEMORY_OFFSET * 4 bits
 #define HALT 0x8A000000
 
 #define N_FLAG 3 // Negative

@@ -14,7 +14,7 @@ void load_binary(const char *filename, uint32_t *memory, size_t *size) {
     fseek(file, 0, SEEK_END);
     *size = ftell(file) / sizeof(uint32_t);
     fseek(file, 0, SEEK_SET);
-    fread(memory, sizeof(uint32_t), *size, file);
+    fread(memory+MEMORY_OFFSET, sizeof(uint32_t), *size, file);
     fclose(file);
 }
 
@@ -411,7 +411,7 @@ void single_data_transfer(CPUState *cpu, uint32_t instruction) {
     uint32_t Xn = (instruction >> 5) & 0x1F;      // Base register (bits 9-5)
     uint32_t Rt = instruction & 0x1F;             // Target register (bits 4-0)
     uint32_t I = (instruction >> 11) & 0x1; // Index flag (bit 11)
-    uint8_t *byte_memory = (uint8_t *)memory;
+    uint8_t *byte_memory = (uint8_t *)(memory+MEMORY_OFFSET);
     uint64_t address;
     uint64_t data;
 
@@ -590,7 +590,7 @@ void output_state(CPUState *cpu, uint32_t *memory, size_t size) {
     printf("PC = %016lx\n\n", cpu->pc-4);
     printf("PSTATE : %s\n", pstate_str);
     printf("Non-Zero Memory:\n");
-    for (size_t i = 0; i < (size + MEMORY_SIZE / sizeof(uint32_t)); i++) {
+    for (size_t i = 0; i < (MEMORY_SIZE / sizeof(uint32_t)); i++) {
         if (memory[i] != 0) {
             printf("0x%08lx: 0x%08x\n", i * 4, memory[i]);
         }
@@ -609,7 +609,7 @@ int main(int argc, char **argv) {
     size_t size;
     load_binary(argv[1], memory, &size);
 
-    emulate(&cpu, memory, size);
+    emulate(&cpu, memory+MEMORY_OFFSET, size);
 
     if (argc == 3) {
         freopen(argv[2], "w", stdout);
