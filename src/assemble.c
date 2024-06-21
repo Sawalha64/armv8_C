@@ -1,29 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#define MAX_LABELS 1024
-#define MAX_LINE_LENGTH 256
-
-typedef struct {
-    char label[MAX_LINE_LENGTH];
-    int address;
-} Label;
+#include "assemble.h"
 
 Label symbolTable[MAX_LABELS];
 int labelCount = 0;
-
-typedef struct {
-    char instruction[MAX_LINE_LENGTH];
-    int address;
-} Instruction;
 
 Instruction instructions[MAX_LABELS];
 int instructionCount = 0;
 
 // Function to add label to the symbol table
 void addLabel(char *label, int address) {
-    printf("Adding label: %s at address: %d\n", label, address);
     strcpy(symbolTable[labelCount].label, label);
     symbolTable[labelCount].address = address;
     labelCount++;
@@ -40,7 +27,6 @@ int labelExists(const char *label) {
 
 // Function to get the address of a label
 int getLabelAddress(char *label) {
-    printf("Getting address for label: %s\n", label);
     for (int i = 0; i < labelCount; i++) {
         if (strcmp(symbolTable[i].label, label) == 0) {
             printf("Found label: %s at address: %d\n", label, symbolTable[i].address);
@@ -53,7 +39,6 @@ int getLabelAddress(char *label) {
 
 // Function to parse and add instruction
 void addInstruction(char *line, int address) {
-    printf("Adding instruction: %s at address: %d\n", line, address);
     strcpy(instructions[instructionCount].instruction, line);
     instructions[instructionCount].address = address;
     instructionCount++;
@@ -70,19 +55,15 @@ int parseOperand(char *operand, int *sf) {
         return strtol(operand, NULL, 16);
     }
     if (operand[0] == '#') {
-        printf("Parsing immediate value: %s\n", operand);
         return strtoul(&operand[1], NULL, 0);
     } else if (operand[0] == 'x') {
-        printf("Parsing X register: %s\n", operand);
         if (sf != NULL) {
             *sf = 1;
         }
         return atoi(&operand[1]);
     } else if (operand[0] == 'w') {
-        printf("Parsing W register: %s\n", operand);
         return atoi(&operand[1]);
     } else {
-        printf("Parsing immediate value: %s\n", operand);
         return strtoul(&operand[0], NULL, 0);
     }
 }
@@ -92,7 +73,6 @@ int arithmeticInstructions(char *mnemonic, char *rd, char *rn, char *operand, ch
     int instruction = 0;
     int sf = 0;  // Default to 64-bit
     int opc = 0;
-    int opi = 0;
     int shiftAmount = 0;
     int imm12 = 0;
     int rm = 0;
@@ -132,10 +112,9 @@ int arithmeticInstructions(char *mnemonic, char *rd, char *rn, char *operand, ch
     }
     
     if (strchr(operand, '#') != NULL) {
-        printf("Operand is an immediate value: %s\n", operand);
         
         if (remainder != NULL) {
-            char *shiftType = strtok(remainder, " \t\n");
+            strtok(remainder, " \t\n");
             char *shiftVal = strtok(NULL, " \t\n");
             shiftAmount = parseOperand(shiftVal, NULL);
             if (shiftAmount != 0) {
@@ -156,7 +135,6 @@ int arithmeticInstructions(char *mnemonic, char *rd, char *rn, char *operand, ch
 
         instruction = (sf << 31) | (opc << 29) | (0b100 << 26) | (0b010 << 23) | (sh << 22) | ((imm12 & 0xFFF) << 10) | (Rn << 5) | Rd;
     } else {
-        printf("Operand is a register: %s\n", operand);
         rm = parseOperand(operand, &sf);
         int shiftCode = 8;
         if (remainder != NULL) {
@@ -216,8 +194,6 @@ int logicalInstructions(char *mnemonic, char *rd, char *rn, char *operand, char 
     int sf = 0;
     int opc = 0;
     int shiftAmount = 0;
-    int imm12 = 0;
-    int opVal = parseOperand(operand, &sf);
     int Rn = parseOperand(rn, &sf);
     int Rd = parseOperand(rd, &sf);
     int shiftCode = 0;
@@ -247,20 +223,17 @@ int logicalInstructions(char *mnemonic, char *rd, char *rn, char *operand, char 
     
     // Check if operand is an immediate value
     if (strchr(operand, '#') != NULL) {
-        printf("Operand is an immediate value: %s\n", operand);
         int imm = parseOperand(operand, NULL);
         if (remainder != NULL) {
-            char *shiftType = strtok(remainder, " \t\n");
+            strtok(remainder, " \t\n");
             char *shiftVal = strtok(NULL, " \t\n");
             shiftAmount = parseOperand(shiftVal, NULL);
             if (shiftAmount != 0) {
             }
         } 
-        imm12 = opVal;
         instruction = (sf << 31) | (opc << 29) | (0b100 << 26) | (shiftAmount << 22) | ((imm & 0xFFF) << 10) | (Rn << 5) | Rd;
     } else {
         if (remainder != NULL) {
-            printf("Processing remainder: %s\n", remainder);
             char *shiftType = strtok(remainder, " \t\n");
             char *shiftVal = strtok(NULL, " \t\n");
             shiftAmount = parseOperand(shiftVal, NULL);
@@ -318,7 +291,6 @@ int movInstructions(char *mnemonic, char *rd, char *operand, char *remainder) {
     int sf = 0;  // Size flag (0 for 32-bit, 1 for 64-bit)
     int opi = 0b101;
     int opc = 0b01; // Invalid opc as placeholder
-    int Rn = 0;  // Source register (for register moves)
     int Rd = parseOperand(rd, &sf);
     int imm16 = 0;
     int shiftAmount = 0;
@@ -340,11 +312,10 @@ int movInstructions(char *mnemonic, char *rd, char *operand, char *remainder) {
         }
 
     if (remainder != NULL) {
-            char *shiftType = strtok(remainder, " \t\n");
+            strtok(remainder, " \t\n");
             char *shiftVal = strtok(NULL, " \t\n");
             shiftAmount = parseOperand(shiftVal, NULL);
             if (shiftAmount != 0) {
-                printf("shift > 0\n");
             }
             shiftAmount /= 16;
         } 
@@ -377,7 +348,7 @@ void parseAddressingMode(char *input, int *reg, int *offset, int *preIndex, int 
             *preIndex = 0;  // Post-indexing or offset
         } else {
             *preIndex = 1;
-            exclamation = ' ';
+            *exclamation = ' ';
         }
         char *token = strtok(input, " ,#");
         if (token) {
@@ -388,7 +359,7 @@ void parseAddressingMode(char *input, int *reg, int *offset, int *preIndex, int 
         if (token != NULL) {
             *offset = parseOperand(token, NULL);
         } else {
-            *offset = 0;//
+            *offset = 0;
         }
     }
 }
@@ -410,18 +381,13 @@ int singleDataTransfer(char *mnemonic, char *rt, char *rn, char *remainder, int 
 
     if (label) {
         labeloffset = getLabelAddress(rn);
-        printf("\n label: %d, LineNo: %d\n", labeloffset/4, lineNo);
         labeloffset -= (lineNo * 4);
         labeloffset /= 4;
-        printf("\n Offset: %d\n",labeloffset);
         if (labeloffset < 0) {
             labeloffset *= -1;
             neg = 1;
         }
     }
-
-
-    printf("\nmnemonic: %s, rt: %s, rn: %s, remainder: %s\n", mnemonic, rt, rn, remainder);
 
     if (strcmp(mnemonic, "str") == 0) {
         L = 0b0; // STR operation code
@@ -435,7 +401,6 @@ int singleDataTransfer(char *mnemonic, char *rt, char *rn, char *remainder, int 
     }
 
     if (rn[0] == '#' || label) { // Literal Load NEEDS TO BE CHANGED LATER TO COMPENSATE FOR LABELS
-        printf("Literal:\n");
         if (label) {
             offset = labeloffset;
         } else {
@@ -446,7 +411,6 @@ int singleDataTransfer(char *mnemonic, char *rt, char *rn, char *remainder, int 
         } else {
             instruction = (0 << 31) | (sf << 30) | (0b011000 << 24) | (offset << 5) | Rt;
         }
-        printf("Literal Load: Offset = %d\n", offset);
     } else if (remainder == NULL || (strchr(remainder, '#') != NULL && strchr(remainder, ']') != NULL && strchr(remainder, '!') == NULL)) { // Offset
         char input[20];
         sprintf(input, "%s, %s", rn, remainder);
@@ -459,13 +423,10 @@ int singleDataTransfer(char *mnemonic, char *rt, char *rn, char *remainder, int 
         U = 1;
         instruction = (1 << 31) | (sf << 30) | (0b11100 << 25) | (U << 24) | (0 << 23) | (L << 22) | (offset << 10) | (Rn << 5) | Rt;
     } else if (strchr(remainder, '!') != NULL) { // Pre-Index
-        printf("preIndex:\n");
         char *input = strcat(rn, remainder);
         parseAddressingMode(input, &Rn, &offset, &preIndex, &sf, 0);
         instruction = (1 << 31) | (sf << 30) | (0b11100 << 25) | (U << 24) | (0 << 23) | (L << 22) | (0 << 21) | (offset << 12) | (preIndex << 11) | (1 << 10) | (Rn << 5) | Rt;
-        printf("Pre-Index: Rn = %d, Offset = %d\n", Rn, offset);
     } else if (strchr(remainder, ']') == NULL) { // Post-Index
-        printf("POST INDEX\n");
         parseAddressingMode(rn, &Rn, &offset, &preIndex, &sf, 1); // Offset should be 0
         char *off = strtok(remainder, " \t\n");
         offset = parseOperand(off, NULL);
@@ -477,8 +438,6 @@ int singleDataTransfer(char *mnemonic, char *rt, char *rn, char *remainder, int 
             printf("Post-Index: Rn = %d, Offset = %d\n", Rn, offset);
         }
     } else { // Register
-        printf("Register\n");
-        char *start = strchr(rn, '[');
         char string[20];
         sprintf(string, "%s, %s", rn, remainder);
         parseAddressingMode(string, &Rn, &offset, &preIndex, &sf, 1); // Offset should be 0
@@ -498,10 +457,8 @@ int encodeBranchInstruction(char *mnemonic, char *address, int lineNo) {
 
     if (label) {
         offset = getLabelAddress(address);
-        printf("\n label: %d, LineNo: %d\n", offset/4, lineNo);
         offset -= (lineNo * 4);
         offset /= 4;
-        printf("\n Offset: %d\n",offset);
         if (offset < 0) {
             offset *= -1;
             neg = 1;
@@ -532,7 +489,6 @@ int encodeBranchInstruction(char *mnemonic, char *address, int lineNo) {
         if (dotPosition != NULL) {
             strcpy(condition, dotPosition + 1);
         }
-        printf("condition: %s\n", condition);
         int code = -1;
         if (strcmp(condition, "eq") == 0) {
             code = 0x0; // Equal (Z == 1)
@@ -565,7 +521,6 @@ int encodeBranchInstruction(char *mnemonic, char *address, int lineNo) {
 
 // Function to encode a special directive
 int encodeDirective(char *directive, char *value) {
-    printf("Encoding directive: %s %s\n", directive, value);
     if (strcmp(directive, ".int") == 0) {
         return (int)strtol(value, NULL, 0);
     }
@@ -580,7 +535,6 @@ int processLine(char *line, int address) {
     if (strchr(token, ':') != NULL) {
         // It's a label
         token[strlen(token) - 1] = '\0'; // Remove the colon
-        printf("\n labelname: %s\n", token);
         addLabel(token, address);
         return 1;
     } else {
